@@ -1,0 +1,164 @@
+name: tests
+
+on:
+  - push
+  - pull_request
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |  
+          python -m pip install --upgrade pip
+          python -m pip install tox tox-gh-actions
+
+      - name: Run tests with tox
+        run: tox
+
+      - name: Calculate artifact file name
+        env:
+          COVNAME_BASE: "py${{ matrix.python-version }}"
+        # Important for windows, because the PowerShell does not
+        # support the manipulations in "run" below.
+        shell: bash
+        run: |
+          COVNAME_BASE=${{ env.COVNAME_BASE }}
+          COVNAME_SRC=${COVNAME_BASE//.}
+          COVNAME_TARGET="${COVNAME_SRC/-/_}_${{ matrix.os }}"
+          echo COVNAME_TARGET=${COVNAME_TARGET} >> $GITHUB_ENV
+          mv .coverage.${COVNAME_SRC} .coverage.${COVNAME_TARGET}
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: .cov_py${{ matrix.python-version }}_${{ matrix.os }}
+          path: .coverage.${{ env.COVNAME_TARGET }}
+
+  process_coverage:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      
+      - name: Install packages
+        run: |  
+          python -m pip install --upgrade pip
+          python -m pip install coverage
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: .
+
+      - name: Process coverage files
+        run: |
+          ls
+          find . -mindepth 2 -type f -name ".coverage.*" -exec mv {} . \;
+          python -m coverage combine --rcfile='pyproject.toml' --keep
+          python -m coverage report --show-missing --rcfile='pyproject.toml'
+          python -m coverage html --rcfile='pyproject.toml' -d htmlcov
+
+      - name: Upload html coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage_report
+          path: htmlcov
+      
+      - name: Upload coverage database
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage_db
+          path: .coverage
+
+  deploy_coverage_report:
+    if: always()
+    needs: process_coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        if: always()
+
+      - name: Set up Python 3.11
+        if: always()
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install packages
+        if: always()
+        run: |  
+          python -m pip install --upgrade pip
+          python -m pip install coverage pybadges
+
+      - name: Download coverage database
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage_db
+          path: .
+
+      - name: Create coverage badge
+        if: always()
+        run: |
+          python coverage_report/postprocessing.py pyproject.toml coverage_badge.svg "https://devds96.github.io/pytest-samples/coverage/index.html"
+
+      - name: Download html coverage report
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage_report
+          path: htmlcov
+
+      - name: Prepare coverage results for pages
+        if: always()
+        # We add the index.html template that says that the
+        # coverage report failed. This may then be overwritten by
+        # the actual index.html of the coverage report.
+        run: |
+          rm -rf cover
+          mkdir -p cover
+          cp coverage_report/report_fallback.html cover/index.html
+          mv htmlcov/* cover || true
+          mv coverage_badge.svg cover
+          ls cover
+          head cover/index.html || true
+      
+      - name: Get commit SHA
+        if: always()
+        run: |
+          var=${{ github.sha }}
+          echo "COMMIT_SHA_SHORT=${var::7}" >> $GITHUB_ENV
+
+      - name: Deploy coverage results and badge
+        if: always()
+        uses: JamesIves/github-pages-deploy-action@v4.5.0
+        with:
+          folder: cover
+          target-folder: coverage
+          branch: gh-pages
+          force: true
+          clean: true
+          clean-exclude: |
+            ./index.html
+          commit-message: |
+            Deploy coverage report for commit ${{ env.COMMIT_SHA_SHORT }}

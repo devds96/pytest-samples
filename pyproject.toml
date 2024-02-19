@@ -1,0 +1,98 @@
+[build-system]
+requires = ["setuptools>=42.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pytest_samples"
+authors = [
+    {name = "devds96", email = "src.devds96@gmail.com"}
+]
+license = {text = "MIT"}
+description = """A pytest plugin to help run only a sample subset of \
+all tests in each session."""
+requires-python = ">=3.8"
+classifiers = [
+    "Framework :: Pytest",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
+dynamic = [
+    "dependencies",
+    "readme",
+    "version",
+    "optional-dependencies"
+]
+
+[project.entry-points.pytest11]
+samples = "pytest_samples.plugin"
+
+[project.urls]
+Source = "https://github.com/devds96/pytest-samples"
+
+[tool.setuptools.dynamic]
+version = {attr = "pytest_samples.__version__"}
+readme = {file = ["README.md"]}
+dependencies = {file = ["requirements.txt"]}
+optional-dependencies = {tests = { file = ["requirements_tests.txt"] }}
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+addopts = "-p pytester -vv"
+pytester_example_dir = "tests/examples"
+
+[tool.coverage.run]
+branch = true
+relative_files = true
+omit = [
+    "*/itest_*.py"
+]
+source = [
+    "pytest_samples"
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "@_?overload",
+    "_?Protocol",
+    "_?abstractmethod",
+    "raise RuntimeError",
+    "raise AssertionError",
+    "from AssertionError"
+]
+
+[tool.mypy]
+check_untyped_defs = true
+implicit_reexport = false
+no_implicit_optional = true
+strict_equality = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = [
+    "hypothesis_fspaths",
+    "pytimeparse",
+    "sqlalchemy.*",
+    "sqlalchemy_utils",
+]
+ignore_missing_imports = true
+
+[tool.flake8]
+ignore = [
+    "SIM117",  # Reduce multiple with statements with commas
+    "W503"  # line break before binary operator
+]
+max-complexity = 10

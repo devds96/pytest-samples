@@ -1,0 +1,6 @@
+arrow
+pytest
+pytimeparse==1.1.8
+sqlalchemy
+sqlalchemy-utils
+tzdata;sys.platform=="win32"
